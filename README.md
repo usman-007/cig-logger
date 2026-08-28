@@ -2,8 +2,7 @@
 
 A dark-mode-first PWA for tracking cigarettes and roll-ups: one-tap logging with a
 pacing timer, trigger analytics, real cost-per-cigarette from your own purchases,
-and a filterable history. Everything is stored on the device — there is no server
-and nothing is uploaded.
+and a filterable history. 
 
 ```bash
 npm install
