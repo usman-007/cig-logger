@@ -81,15 +81,11 @@ export interface AppData {
   startedAt: number;
 }
 
-export interface StoredAccount {
-  id: string;
-  email: string;
-  name: string;
-  salt: string;
-  hash: string;
-  createdAt: number;
-}
-
+/**
+ * The client's view of who is signed in. The authoritative session is a pair of
+ * httpOnly Supabase cookies; this is a cache of the parts the UI renders.
+ * `guest: true` means local-only preview mode, with no server-side account.
+ */
 export interface Session {
   userId: string;
   email: string;

@@ -69,9 +69,12 @@ export const DEFAULT_SETTINGS: Settings = {
 };
 
 export const STORAGE_KEYS = {
-  accounts: "ash:accounts",
+  /** cached copy of the signed-in session, so a reload doesn't flash /login */
   session: "ash:session",
+  /** local cache of the server's data, and the whole dataset in guest mode */
   data: (userId: string) => `ash:data:${userId}`,
+  /** mutations made offline, waiting to be replayed against the API */
+  outbox: (userId: string) => `ash:outbox:${userId}`,
 } as const;
 
 export const GUEST_USER_ID = "guest";

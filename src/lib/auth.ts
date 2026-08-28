@@ -1,55 +1,22 @@
 "use client";
 
+import { api } from "./api-client";
 import { GUEST_USER_ID, STORAGE_KEYS } from "./constants";
-import type { Session, StoredAccount } from "./types";
-import { uid } from "./utils";
+import type { AppData, Session } from "./types";
 
 /**
- * Accounts live in this browser only — there is no server in this app, so a
- * password protects the local profile switch, not a network boundary. Hashes
- * use PBKDF2-SHA256 (210k iterations) so a stored hash is not reversible.
+ * Accounts live in Supabase Auth. The session itself is a pair of httpOnly
+ * cookies this file never sees — everything here goes through /api/auth/*, and
+ * the copy in STORAGE_KEYS.session is only a cache so the first paint after a
+ * reload doesn't flash the login screen.
+ *
+ * Guest mode is the exception and stays entirely local: no Supabase user, no
+ * rows, just localStorage under GUEST_USER_ID.
  */
-const ITERATIONS = 210_000;
+export const PASSWORD_MIN = 8;
 
-function toHex(buffer: ArrayBuffer) {
-  return [...new Uint8Array(buffer)]
-    .map((b) => b.toString(16).padStart(2, "0"))
-    .join("");
-}
-
-async function derive(password: string, saltHex: string) {
-  const enc = new TextEncoder();
-  const salt = Uint8Array.from(
-    saltHex.match(/.{1,2}/g)?.map((b) => parseInt(b, 16)) ?? [],
-  );
-  const key = await crypto.subtle.importKey(
-    "raw",
-    enc.encode(password),
-    "PBKDF2",
-    false,
-    ["deriveBits"],
-  );
-  const bits = await crypto.subtle.deriveBits(
-    { name: "PBKDF2", salt, iterations: ITERATIONS, hash: "SHA-256" },
-    key,
-    256,
-  );
-  return toHex(bits);
-}
-
-function readAccounts(): StoredAccount[] {
-  if (typeof window === "undefined") return [];
-  try {
-    const raw = window.localStorage.getItem(STORAGE_KEYS.accounts);
-    return raw ? (JSON.parse(raw) as StoredAccount[]) : [];
-  } catch {
-    return [];
-  }
-}
-
-function writeAccounts(accounts: StoredAccount[]) {
-  window.localStorage.setItem(STORAGE_KEYS.accounts, JSON.stringify(accounts));
-}
+const GUEST_COOKIE = "ash-guest";
+const GUEST_COOKIE_MAX_AGE = 60 * 60 * 24 * 365;
 
 export function normalizeEmail(email: string) {
   return email.trim().toLowerCase();
@@ -59,41 +26,38 @@ export function validateEmail(email: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizeEmail(email));
 }
 
-export function accountExists(email: string) {
-  const target = normalizeEmail(email);
-  return readAccounts().some((a) => a.email === target);
-}
-
-export function hasAnyAccount() {
-  return readAccounts().length > 0;
+interface AuthUser {
+  id: string;
+  email: string;
+  name?: string;
 }
 
 export async function signUp(input: {
   email: string;
   password: string;
   name?: string;
-}): Promise<Session> {
+}): Promise<{ session: Session | null; needsConfirmation: boolean }> {
   const email = normalizeEmail(input.email);
   if (!validateEmail(email)) throw new Error("Enter a valid email address.");
-  if (input.password.length < 6)
-    throw new Error("Password needs at least 6 characters.");
+  if (input.password.length < PASSWORD_MIN)
+    throw new Error(`Password needs at least ${PASSWORD_MIN} characters.`);
 
-  const accounts = readAccounts();
-  if (accounts.some((a) => a.email === email))
-    throw new Error("An account with that email already exists on this device.");
+  const result = await api<{ user: AuthUser | null; needsConfirmation: boolean }>({
+    method: "POST",
+    path: "/api/auth/signup",
+    body: { email, password: input.password, name: input.name?.trim() || undefined },
+  });
 
-  const salt = toHex(crypto.getRandomValues(new Uint8Array(16)).buffer);
-  const hash = await derive(input.password, salt);
-  const account: StoredAccount = {
-    id: uid("user"),
-    email,
-    name: input.name?.trim() || email.split("@")[0],
-    salt,
-    hash,
-    createdAt: Date.now(),
+  // With email confirmation switched on there is no session yet — the caller
+  // shows "check your inbox" instead of navigating to the dashboard.
+  if (result.needsConfirmation || !result.user) {
+    return { session: null, needsConfirmation: true };
+  }
+
+  return {
+    session: toSession(result.user, input.name?.trim()),
+    needsConfirmation: false,
   };
-  writeAccounts([...accounts, account]);
-  return startSession(account);
 }
 
 export async function signIn(input: {
@@ -101,11 +65,38 @@ export async function signIn(input: {
   password: string;
 }): Promise<Session> {
   const email = normalizeEmail(input.email);
-  const account = readAccounts().find((a) => a.email === email);
-  if (!account) throw new Error("No account found for that email on this device.");
-  const hash = await derive(input.password, account.salt);
-  if (hash !== account.hash) throw new Error("That password doesn't match.");
-  return startSession(account);
+  if (!validateEmail(email)) throw new Error("Enter a valid email address.");
+
+  const result = await api<{ user: AuthUser }>({
+    method: "POST",
+    path: "/api/auth/login",
+    body: { email, password: input.password },
+  });
+
+  return toSession(result.user);
+}
+
+export async function requestPasswordReset(email: string) {
+  await api({
+    method: "POST",
+    path: "/api/auth/forgot-password",
+    body: { email: normalizeEmail(email) },
+  });
+}
+
+export async function completePasswordReset(password: string) {
+  if (password.length < PASSWORD_MIN)
+    throw new Error(`Password needs at least ${PASSWORD_MIN} characters.`);
+  await api({ method: "POST", path: "/api/auth/reset-password", body: { password } });
+}
+
+function toSession(user: AuthUser, fallbackName?: string): Session {
+  return {
+    userId: user.id,
+    email: user.email,
+    name: user.name || fallbackName || user.email.split("@")[0],
+    guest: false,
+  };
 }
 
 export function continueAsGuest(): Session {
@@ -116,22 +107,30 @@ export function continueAsGuest(): Session {
     guest: true,
   };
   writeSession(session);
+  // Read by src/proxy.ts so a guest isn't redirected off /dashboard for having
+  // no Supabase session.
+  document.cookie = `${GUEST_COOKIE}=1; path=/; max-age=${GUEST_COOKIE_MAX_AGE}; samesite=lax`;
   return session;
 }
 
-function startSession(account: StoredAccount): Session {
-  const session: Session = {
-    userId: account.id,
-    email: account.email,
-    name: account.name,
-    guest: false,
-  };
-  writeSession(session);
-  return session;
+export async function signOut() {
+  clearGuestCookie();
+  window.localStorage.removeItem(STORAGE_KEYS.session);
+  try {
+    await api({ method: "POST", path: "/api/auth/logout" });
+  } catch {
+    // Offline, or the session had already expired. The local state is gone
+    // either way, which is what the user asked for.
+  }
+}
+
+function clearGuestCookie() {
+  document.cookie = `${GUEST_COOKIE}=; path=/; max-age=0; samesite=lax`;
 }
 
 export function writeSession(session: Session) {
   window.localStorage.setItem(STORAGE_KEYS.session, JSON.stringify(session));
+  if (!session.guest) clearGuestCookie();
 }
 
 export function readSession(): Session | null {
@@ -144,28 +143,24 @@ export function readSession(): Session | null {
   }
 }
 
-export function signOut() {
-  window.localStorage.removeItem(STORAGE_KEYS.session);
+/** The guest's local dataset, for handing over to a freshly created account. */
+export function readGuestData(): AppData | null {
+  if (typeof window === "undefined") return null;
+  const raw = window.localStorage.getItem(STORAGE_KEYS.data(GUEST_USER_ID));
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw) as AppData;
+  } catch {
+    return null;
+  }
 }
 
-/** Move guest-mode data onto a fresh account so a preview isn't thrown away. */
-export function claimGuestData(userId: string) {
-  const guestKey = STORAGE_KEYS.data(GUEST_USER_ID);
-  const guestData = window.localStorage.getItem(guestKey);
-  if (!guestData) return false;
-  window.localStorage.setItem(STORAGE_KEYS.data(userId), guestData);
-  window.localStorage.removeItem(guestKey);
-  return true;
+export function clearGuestData() {
+  window.localStorage.removeItem(STORAGE_KEYS.data(GUEST_USER_ID));
 }
 
 export function guestHasData() {
-  if (typeof window === "undefined") return false;
-  const raw = window.localStorage.getItem(STORAGE_KEYS.data(GUEST_USER_ID));
-  if (!raw) return false;
-  try {
-    const parsed = JSON.parse(raw) as { logs?: unknown[]; purchases?: unknown[] };
-    return (parsed.logs?.length ?? 0) > 0 || (parsed.purchases?.length ?? 0) > 0;
-  } catch {
-    return false;
-  }
+  const data = readGuestData();
+  if (!data) return false;
+  return (data.logs?.length ?? 0) > 0 || (data.purchases?.length ?? 0) > 0;
 }

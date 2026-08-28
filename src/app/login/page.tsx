@@ -20,12 +20,18 @@ import { Button } from "@/components/ui/button";
 import { Field, Input } from "@/components/ui/field";
 import { Segmented } from "@/components/ui/misc";
 import { useStore } from "@/lib/store";
-import { guestHasData } from "@/lib/auth";
+import { guestHasData, PASSWORD_MIN } from "@/lib/auth";
 
 type Mode = "signin" | "signup";
 
 /** A one-shot environment read, not a live subscription. */
 const noopSubscribe = () => () => {};
+
+/** Set by /auth/confirm when an emailed link doesn't check out. */
+const LINK_ERRORS: Record<string, string> = {
+  "link-invalid": "That link is missing something. Try signing in instead.",
+  "link-expired": "That link has expired. Sign in, or request a new one.",
+};
 
 const HIGHLIGHTS = [
   {
@@ -66,8 +72,11 @@ function LoginView() {
   const [email, setEmail] = React.useState("");
   const [password, setPassword] = React.useState("");
   const [showPassword, setShowPassword] = React.useState(false);
-  const [error, setError] = React.useState<string | null>(null);
+  const [error, setError] = React.useState<string | null>(
+    LINK_ERRORS[params.get("error") ?? ""] ?? null,
+  );
   const [busy, setBusy] = React.useState(false);
+  const [checkInbox, setCheckInbox] = React.useState(false);
   const hasGuestData = React.useSyncExternalStore(
     noopSubscribe,
     guestHasData,
@@ -85,8 +94,15 @@ function LoginView() {
     setError(null);
     setBusy(true);
     try {
-      if (mode === "signup") await signUp({ email, password, name });
-      else await signIn({ email, password });
+      if (mode === "signup") {
+        const needsConfirmation = await signUp({ email, password, name });
+        if (needsConfirmation) {
+          setCheckInbox(true);
+          return;
+        }
+      } else {
+        await signIn({ email, password });
+      }
       router.replace("/dashboard");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong.");
@@ -128,7 +144,7 @@ function LoginView() {
           </ul>
         </div>
         <p className="text-xs text-subtle-foreground">
-          Your data is stored on this device only. Nothing is uploaded anywhere.
+          Your data is private to your account and synced across your devices.
         </p>
       </section>
 
@@ -146,7 +162,7 @@ function LoginView() {
               {mode === "signup"
                 ? convertingGuest
                   ? "Keeps everything you logged in preview mode."
-                  : "Sets up a private profile on this device."
+                  : "Sets up a private account, synced across your devices."
                 : "Sign in to pick up where you left off."}
             </p>
           </div>
@@ -202,7 +218,7 @@ function LoginView() {
             <Field
               label="Password"
               htmlFor="password"
-              hint={mode === "signup" ? "6+ characters" : undefined}
+              hint={mode === "signup" ? `${PASSWORD_MIN}+ characters` : undefined}
             >
               <div className="relative">
                 <Lock className="pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-subtle-foreground" />
@@ -211,7 +227,7 @@ function LoginView() {
                   className="pl-10 pr-11"
                   type={showPassword ? "text" : "password"}
                   required
-                  minLength={6}
+                  minLength={mode === "signup" ? PASSWORD_MIN : undefined}
                   autoComplete={mode === "signup" ? "new-password" : "current-password"}
                   placeholder="••••••••"
                   value={password}
@@ -237,7 +253,14 @@ function LoginView() {
               </p>
             ) : null}
 
-            {mode === "signup" && hasGuestData ? (
+            {checkInbox ? (
+              <p className="rounded-xl border border-primary/25 bg-primary/[0.06] px-3.5 py-2.5 text-[13px] text-muted-foreground">
+                Check your inbox — we sent a link to confirm {email}. Open it and
+                you&apos;ll land straight in your dashboard.
+              </p>
+            ) : null}
+
+            {mode === "signup" && hasGuestData && !checkInbox ? (
               <p className="rounded-xl border border-primary/25 bg-primary/[0.06] px-3.5 py-2.5 text-[13px] text-muted-foreground">
                 Your preview-mode entries will move over to this account.
               </p>
@@ -270,8 +293,8 @@ function LoginView() {
             Continue as guest
           </Button>
           <p className="mt-3 text-center text-xs leading-relaxed text-subtle-foreground">
-            Guest mode keeps everything in this browser. You can turn it into an
-            account later without losing anything.
+            Guest mode keeps everything in this browser — nothing is uploaded.
+            You can turn it into an account later without losing anything.
           </p>
         </div>
       </section>

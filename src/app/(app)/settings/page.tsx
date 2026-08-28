@@ -63,10 +63,14 @@ export default function SettingsPage() {
 
   const upload = async (file: File) => {
     try {
-      importData(await file.text());
+      await importData(await file.text());
       toast({ title: "Data imported", tone: "good" });
-    } catch {
-      toast({ title: "That file couldn't be read", tone: "critical" });
+    } catch (error) {
+      toast({
+        title: "That file couldn't be imported",
+        description: error instanceof Error ? error.message : undefined,
+        tone: "critical",
+      });
     }
   };
 
@@ -74,7 +78,7 @@ export default function SettingsPage() {
     <div className="space-y-4">
       <PageHeader
         title="Settings"
-        description="Targets, pricing and your data — all stored on this device."
+        description="Targets, pricing and your data — synced to your account."
       />
 
       <Card>
@@ -253,8 +257,8 @@ export default function SettingsPage() {
             <Button
               variant="secondary"
               size="sm"
-              onClick={() => {
-                signOut();
+              onClick={async () => {
+                await signOut();
                 router.replace("/login");
               }}
             >

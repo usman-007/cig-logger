@@ -3,11 +3,16 @@
  *
  * Next.js emits content-hashed assets, so there is no useful fixed precache
  * list beyond the shell. Strategy:
- *   navigations  -> network first, fall back to the cached page, then /offline
- *   static build -> cache first (hashed URLs are immutable)
+ *   /api, /auth   -> never cached (per-user, session-scoped)
+ *   navigations   -> network first, fall back to the cached page, then /offline
+ *   static build  -> cache first (hashed URLs are immutable)
  *   everything else same-origin -> stale-while-revalidate
+ *
+ * Cached navigations only ever contain the app shell — the data is fetched
+ * client-side from /api/bootstrap — so a cached page can't leak one account's
+ * entries to another.
  */
-const VERSION = "ash-v1";
+const VERSION = "ash-v2";
 const SHELL_CACHE = `${VERSION}-shell`;
 const PAGE_CACHE = `${VERSION}-pages`;
 const ASSET_CACHE = `${VERSION}-assets`;
@@ -92,6 +97,11 @@ self.addEventListener("fetch", (event) => {
   if (url.origin !== self.location.origin) return;
   // Never cache dev-server or RSC payload traffic.
   if (url.pathname.startsWith("/_next/webpack") || url.searchParams.has("_rsc")) return;
+
+  // API and auth responses are per-user and session-scoped. Caching them would
+  // let one account's data be replayed to the next person to sign in on this
+  // device. Always go to the network; the store's outbox handles being offline.
+  if (url.pathname.startsWith("/api/") || url.pathname.startsWith("/auth/")) return;
 
   if (request.mode === "navigate") {
     event.respondWith(networkFirst(request));

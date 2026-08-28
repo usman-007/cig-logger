@@ -45,8 +45,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 variant="ghost"
                 size="sm"
                 className="mt-2 w-full justify-start px-2"
-                onClick={() => {
-                  signOut();
+                onClick={async () => {
+                  await signOut();
                   router.replace("/login");
                 }}
               >
