@@ -1,0 +1,41 @@
+{
+  "name": "Ash — Cigarette & Habit Tracker",
+  "short_name": "Ash",
+  "description": "Log cigarettes in one tap, see your triggers, and track what smoking actually costs you.",
+  "id": "/dashboard",
+  "start_url": "/dashboard",
+  "scope": "/",
+  "display": "standalone",
+  "display_override": ["standalone", "minimal-ui"],
+  "orientation": "portrait",
+  "background_color": "#0b1015",
+  "theme_color": "#0b1015",
+  "categories": ["health", "lifestyle", "productivity"],
+  "icons": [
+    { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/icon-maskable-192.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
+    { "src": "/icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    {
+      "name": "Log a cigarette",
+      "short_name": "Log",
+      "description": "Record one at the current time",
+      "url": "/dashboard?action=log",
+      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Patterns",
+      "short_name": "Patterns",
+      "description": "Trigger and timing analytics",
+      "url": "/analytics"
+    },
+    {
+      "name": "Log a purchase",
+      "short_name": "Purchase",
+      "description": "Add a pack or supplies",
+      "url": "/purchases?action=new"
+    }
+  ]
+}

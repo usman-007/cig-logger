@@ -1,26 +1,199 @@
 @import "tailwindcss";
 
+/* ------------------------------------------------------------------
+   Ash — dark-mode-first theme tokens.
+   Surface #141b23 is the validated chart surface: every data hue below
+   passed the lightness-band / chroma / CVD / normal-vision / contrast
+   checks against it (see lib/chart-theme.ts for the provenance note).
+------------------------------------------------------------------ */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  color-scheme: dark;
+
+  --background: #0b1015;
+  --background-elevated: #10161d;
+  --card: #141b23;
+  --card-hover: #182029;
+  --popover: #161e27;
+
+  --foreground: #e8edf3;
+  --muted-foreground: #93a1b1;
+  --subtle-foreground: #6d7c8d;
+
+  --border: #232d3a;
+  --border-strong: #31404f;
+  --ring: #10b981;
+
+  /* brand accents (UI chrome) */
+  --primary: #10b981;
+  --primary-strong: #059669;
+  --primary-foreground: #04120c;
+  --accent-amber: #f59e0b;
+  --accent-rose: #f43f5e;
+
+  /* status — fixed roles, always shipped with an icon + label */
+  --status-good: #0ca30c;
+  --status-warning: #fab219;
+  --status-serious: #ec835a;
+  --status-critical: #d03b3b;
+
+  /* data marks */
+  --chart-cig: #d97706;
+  --chart-cig-soft: #7c4a0d;
+  --chart-money: #16a34a;
+  --chart-grid: #212b36;
+  --chart-axis: #6d7c8d;
+
+  /* trigger categorical palette — fixed slot order, never cycled */
+  --trigger-1: #f43f5e;
+  --trigger-2: #7c3aed;
+  --trigger-3: #0d9488;
+  --trigger-4: #2563eb;
+  --trigger-5: #16a34a;
+  --trigger-6: #c026d3;
+  --trigger-7: #d97706;
+  --trigger-8: #0284c7;
+
+  --radius: 1rem;
 }
 
 @theme inline {
   --color-background: var(--background);
+  --color-background-elevated: var(--background-elevated);
+  --color-card: var(--card);
+  --color-card-hover: var(--card-hover);
+  --color-popover: var(--popover);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-subtle-foreground: var(--subtle-foreground);
+  --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
+  --color-ring: var(--ring);
+  --color-primary: var(--primary);
+  --color-primary-strong: var(--primary-strong);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-amber: var(--accent-amber);
+  --color-rose: var(--accent-rose);
+  --color-good: var(--status-good);
+  --color-warning: var(--status-warning);
+  --color-serious: var(--status-serious);
+  --color-critical: var(--status-critical);
+  --color-chart-cig: var(--chart-cig);
+  --color-chart-money: var(--chart-money);
+  --color-chart-grid: var(--chart-grid);
+  --color-chart-axis: var(--chart-axis);
+
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+
+  --radius-xl: 1rem;
+  --radius-2xl: 1.25rem;
+  --radius-3xl: 1.75rem;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+@layer base {
+  * {
+    border-color: var(--border);
+  }
+
+  html {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  body {
+    background-color: var(--background);
+    color: var(--foreground);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    overscroll-behavior-y: none;
+  }
+
+  /* Ambient wash so the charcoal reads as depth, not flat black */
+  body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 0;
+    background:
+      radial-gradient(58rem 34rem at 12% -12%, rgba(16, 185, 129, 0.09), transparent 62%),
+      radial-gradient(48rem 30rem at 108% 6%, rgba(244, 63, 94, 0.06), transparent 60%);
+  }
+
+  ::selection {
+    background: rgba(16, 185, 129, 0.28);
+  }
+
+  input[type="number"]::-webkit-outer-spin-button,
+  input[type="number"]::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+
+  input[type="number"] {
+    -moz-appearance: textfield;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+@layer utilities {
+  .safe-bottom {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+
+  .safe-top {
+    padding-top: env(safe-area-inset-top);
+  }
+
+  .tabular {
+    font-variant-numeric: tabular-nums;
+  }
+
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+}
+
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slide-up {
+  from { opacity: 0; transform: translateY(12px) scale(0.985); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes pop {
+  0% { transform: scale(1); }
+  45% { transform: scale(0.92); }
+  100% { transform: scale(1); }
+}
+
+@keyframes pulse-ring {
+  0% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.35); }
+  70% { box-shadow: 0 0 0 14px rgba(16, 185, 129, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
+}
+
+.animate-fade-in { animation: fade-in 0.18s ease-out; }
+.animate-slide-up { animation: slide-up 0.22s cubic-bezier(0.16, 1, 0.3, 1); }
+.animate-pop { animation: pop 0.25s ease-out; }
+.animate-pulse-ring { animation: pulse-ring 2.4s ease-out infinite; }
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-fade-in,
+  .animate-slide-up,
+  .animate-pop,
+  .animate-pulse-ring {
+    animation: none;
+  }
 }
